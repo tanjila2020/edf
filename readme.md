@@ -34,15 +34,13 @@ output the sequence of the schedule of tasks.
     gantt_edf.png is generated based on the input tasks
     Deadline missed for each task: {'T1': 0, 'T2': 0, 'T3': 0}
     ```
-- Example output:
-  
-![alt gantt_edf.png](gantt_edf.png)
+
 
 ## Git workflow
 
 ### Download project
 ```git
-git clone https://github.com/pollmix/multiprocessor-edf.git
+git clone https://github.com/tanjila2020/edf.git
 ```
 
 ### Download latest code
