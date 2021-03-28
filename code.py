@@ -7,6 +7,7 @@ import math
 
 
 def generate_gnatt_chart(graph, time_span, name='figure'):
+    # remove this line to view full plot
     if time_span > 60:
         time_span = 60
 
@@ -64,13 +65,13 @@ def get_graph(jobs):
     return graph
 
 
-def get_deadline_table(jobs):
-    table = {}
-    for job in jobs:
-        task_name = job[0]
-        deadline_missed = job[-1]
-        table[task_name] = table.get(task_name, 0) + int(deadline_missed)
-    return table
+# def get_deadline_table(jobs):
+#     table = {}
+#     for job in jobs:
+#         task_name = job[0]
+#         deadline_missed = job[-1]
+#         table[task_name] = table.get(task_name, 0) + int(deadline_missed)
+#     return table
 
 
 def task_no_of_ins(tasks):
@@ -154,7 +155,12 @@ def preemptive(queue, tasks_period_map):
             if task_name not in job_response_time:
                 job_response_time[task_name] = {}
 
-            job_response_time[task_name][job_no] = task_start_time - (job_no - 1) * tasks_period_map[task_name]
+            period = (job_no - 1) * tasks_period_map[task_name]
+            response_time = task_end_time - period
+
+            print(f'{task_name}:{job_no}  start: {task_start_time}, execution: {execution_time}, end: {task_end_time}, current period: {period}, response: {response_time}')
+
+            job_response_time[task_name][job_no] = response_time
             cpu_current_time = task_end_time
             output.append(job)
         else:
@@ -173,9 +179,9 @@ def non_preemptive(queue, tasks_period_map):
     job_response_time = {}
 
     for task in queue:
-        task_name, execution_time, task_start_time, task_deadline, job_no = task
+        task_name, execution_time, task_start_time, tnsfr_time, task_deadline, job_no = task
         task_start_time = max(task_start_time, cpu_current_time)
-        task_end_time = task_start_time + execution_time
+        task_end_time = task_start_time + tnsfr_time
         deadline_missed = task_end_time > task_deadline
 
         job = (task_name,
@@ -185,12 +191,17 @@ def non_preemptive(queue, tasks_period_map):
                deadline_missed,
                job_no)
 
-        print('task_name, execution_time, task_start_time, task_end_time, deadline_missed, job_no', job)
+        # print('task_name, execution_time, task_start_time, task_end_time, deadline_missed, job_no', job)
 
         if task_name not in job_response_time:
             job_response_time[task_name] = {}
 
-        job_response_time[task_name][job_no] = task_start_time - (job_no - 1) * tasks_period_map[task_name]
+        period = (job_no - 1) * tasks_period_map[task_name]
+        response_time = task_end_time + execution_time - period
+
+        print(f'{task_name}:{job_no}  start: {task_start_time}, execution: {execution_time}, end: {task_end_time}, current period: {period}, response: {response_time}')
+
+        job_response_time[task_name][job_no] = response_time
 
         cpu_current_time = task_end_time
 
@@ -233,9 +244,29 @@ if __name__ == "__main__":
     # example task
     given_tasks = [
         # task name, millions of instructions, dealine, period, data size
-        ["T1", 48, 7, 10, 32],
-        ["T2", 28, 4, 8, 24],
-        ["T3", 98, 9, 12, 32],
+        # ["T1", 48, 7, 10, 32],
+        # ["T2", 28, 4, 8, 24],
+        # ["T3", 98, 9, 12, 32],
+        # Perfect example, no edge processor needed
+        # ["T1", 14, 4, 4, 32],
+        # ["T2", 28, 6, 6, 24],
+        # ["T3", 42, 8, 8, 32],
+        # edge processor needed
+        # ["T1", 28, 5, 5, 32],
+        # ["T2", 28, 6, 6, 24],
+        # ["T3", 28, 7, 7, 32],
+        # ["T4", 28, 8, 8, 32],
+        # another test
+        # ["T1", 28, 5, 5, 32],
+        # ["T2", 28, 4, 6, 32],
+        # ["T3", 28, 4, 7, 32],
+        # ["T4", 28, 3, 6, 32],
+        # multiple overlapped tasks
+        ["T1", 28, 5, 5, 32],
+        ["T2", 28, 4, 6, 32],
+        ["T3", 42, 3, 4, 32],
+        ["T4", 28, 3, 4, 32],
+        ["T5", 28, 3, 4, 32],
     ]
 
     # v = float((input('Enter the value of v: ')))
@@ -244,36 +275,49 @@ if __name__ == "__main__":
     # no_of_cores = float((input('Enter the value of number of core: ')))
     # network_bandwidth = float((input('Enter the value of network bandwidth: ')))
     # scheduling_period = float((input('Enter the value of scheduling period: ')))
+    # check_cycle = int((input('Enter the value of check cycle: ')))
 
     v = 7.683
     o = -4558.52
     freq = 2.5  # cpu frequency in GHz
     no_of_cores = 1
     network_bandwidth = 16  # network BW in Mbps
+    check_cycle = 9
     # scheduling_period = 10
 
     cpu_capacity = ((v * (freq*1000) + o) * no_of_cores) * 0.001  # millons of instructions per milisecond
     cpu_capacity = math.floor(cpu_capacity)
-    network_cpu_capacity = math.floor(cpu_capacity * 5)
+    edge_cpu_capacity = math.floor(cpu_capacity * 5)
     print('CPU Capacity: ', cpu_capacity)
-    print('Network CPU Capacity: ', network_cpu_capacity)
+    print('Edge CPU Capacity: ', edge_cpu_capacity)
     task_no_of_ins_map = task_no_of_ins(given_tasks)
 
     calculated_tasks = []
 
     for task in given_tasks:
+        # getting different parts of the task as different variable
         task_name, no_of_instructions, deadline, period, data_size = task
+        # finding out main cpu execution time for each task
         execution_time = get_execution_time(no_of_instructions, cpu_capacity)
+        # calculated_task is the new tasks array with calculated execution time
         calculated_tasks.append([task_name, execution_time, deadline, period, data_size])
-
+    print('task name, millions of instructions, dealine, period, data size')
     print('User input ', calculated_tasks)
 
+    # finding out the total width or span of the chart
     span = reduce(get_lcm, [task[2] for task in calculated_tasks])
+    # preparing the initial queue of the tasks
     queue = create_queue(calculated_tasks, span)
+    # below map is only for finding out task period quickly. Ex: T1 => 10
     tasks_period_map = task_period(calculated_tasks)
+    # below map is only for finding out task data size quickly. Ex: T1 => 32
     task_data_size_map = task_data_size(calculated_tasks)
-
+    # finding out preemtive edf for the main cpu.
+    # it will return the primary cpu jobs that can be executed on local cpu,
+    # the jobs that are not possible to exucuted on local cpu as offloadable and
+    # each job's response time
     primary_cpu_jobs, offloadable, primary_job_response_time = preemptive(queue, tasks_period_map)
+    # generating basic graph for primat cpu jobs
     primary_graph_data = get_graph(primary_cpu_jobs)
 
     # print("Deadline missed for each task: ")
@@ -283,20 +327,49 @@ if __name__ == "__main__":
 
     for task in offloadable:
         task_name, execution_time, task_start_time, task_deadline, deadline_missed, job_no = task
-        task_start_time += transfer_time(task_data_size_map[task_name], network_bandwidth)
-        execution_time = get_execution_time(task_no_of_ins_map[task_name], network_cpu_capacity)
-        calc_offloadable.append([task_name, execution_time, task_start_time, task_deadline, job_no])
+        # transfer time is added to the start time
+        tnsfr_time = transfer_time(task_data_size_map[task_name], network_bandwidth)
+        # finding out network cpu excution time
+        execution_time = get_execution_time(task_no_of_ins_map[task_name], edge_cpu_capacity)
+        calc_offloadable.append([task_name, execution_time, task_start_time, tnsfr_time, task_deadline, job_no])
 
-    print('New start time after network transfer', calc_offloadable)
-
+    # print('New start time after network transfer', calc_offloadable)
+    # network cpu utilizes edf in no blockeing manner
     network_cpu_jobs, network_job_response_time = non_preemptive(calc_offloadable, tasks_period_map)
-    network_graph_data = get_graph(network_cpu_jobs)
+    # network_graph_data = get_graph(network_cpu_jobs)
+
+    # finding out edf status frequency after `check_cycle` seconds
+    print('Cycle report')
+    for time in range(check_cycle, span + 1, check_cycle):
+        time_start = time - check_cycle + 1
+        complete = []
+        running = []
+        offloaded = []
+        print(f"From time {time_start} to {time}")
+
+        for job in primary_cpu_jobs:
+            job_start_time = job[2] + 1
+            job_end_time = job[3]
+            if job_start_time >= time_start and job_end_time <= time:
+                complete.append(job)
+            elif job_start_time <= time and job_start_time >= time_start:
+                running.append(job)
+
+        for job in offloadable:
+            job_start_time = job[2] + 1
+            job_end_time = job[3]
+            if job_start_time >= time_start and job_end_time <= time:
+                offloaded.append(job)
+
+        print('complete', complete)
+        print('running', running)
+        print('offloaded', offloaded)
 
     print('Primary CPU Job response time')
     print_response_time(primary_job_response_time)
 
     if len(calc_offloadable):
-        print('Network CPU Job response time')
+        print('Edge CPU Job response time')
         print_response_time(network_job_response_time)
 
         print('Missed job count for each task')
@@ -304,4 +377,4 @@ if __name__ == "__main__":
             print(key, value)
 
     generate_gnatt_chart(primary_graph_data, span, 'Primary CPU EDF')
-    generate_gnatt_chart(network_graph_data, span, 'Network CPU EDF')
+    # generate_gnatt_chart(network_graph_data, span, 'Edge CPU EDF')
