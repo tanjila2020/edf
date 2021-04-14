@@ -65,15 +65,6 @@ def get_graph(jobs):
     return graph
 
 
-# def get_deadline_table(jobs):
-#     table = {}
-#     for job in jobs:
-#         task_name = job[0]
-#         deadline_missed = job[-1]
-#         table[task_name] = table.get(task_name, 0) + int(deadline_missed)
-#     return table
-
-
 def task_no_of_ins(tasks):
     tasks_period_map = {}
 
@@ -108,9 +99,10 @@ def create_queue(tasks, time_span):
         task_name, execution_time, deadline, period, data_size = task
 
         for i in range(0, time_span + 1 - period, period):
+            # i means end time
             task_deadline = i + deadline
             queue.append((task_name, execution_time, i, task_deadline))
-
+    # first sort using deadline and then using end time
     queue = sorted(queue, key=lambda x: (x[3], x[2]))
 
     task_counter = []
@@ -125,6 +117,7 @@ def create_queue(tasks, time_span):
         q = tuple(q)
         modified_queue.append(q)
 
+    print('task name, execution time, start time, end time, job no')
     print('Sorted queue', modified_queue)
 
     return modified_queue
@@ -142,14 +135,12 @@ def preemptive(queue, tasks_period_map):
         task_end_time = task_start_time + execution_time
         deadline_missed = task_end_time > task_deadline
 
-        job = (task_name,
+        job = [task_name,
                execution_time,
                task_start_time,
                task_end_time,
                deadline_missed,
-               job_no)
-
-        print('task_name, execution_time, task_start_time, task_end_time, deadline_missed, job_no', job)
+               job_no]
 
         if not deadline_missed:
             if task_name not in job_response_time:
@@ -158,13 +149,30 @@ def preemptive(queue, tasks_period_map):
             period = (job_no - 1) * tasks_period_map[task_name]
             response_time = task_end_time - period
 
-            print(f'{task_name}:{job_no}  start: {task_start_time}, execution: {execution_time}, end: {task_end_time}, current period: {period}, response: {response_time}')
+            print(f'{task_name}:{job_no}  '
+                  f'period: {period}, '
+                  f'start: {task_start_time}, '
+                  f'execution: {execution_time}, '
+                  f'end: {task_end_time}, '
+                  f'deadline: {task_deadline}, '
+                  f'response: {response_time}')
 
             job_response_time[task_name][job_no] = response_time
             cpu_current_time = task_end_time
             output.append(job)
         else:
+            job[2] = (job_no - 1) * tasks_period_map[task_name]
             leftover.append(job)
+
+            print(f'Offloaded: {task_name}:{job_no}  '
+                  f'period: {job[2]}, '
+                  f'start: {task_start_time}, '
+                  f'execution: {execution_time}, '
+                  f'end: {task_end_time}, '
+                  f'deadline: {task_deadline}, '
+                  f'new start time: {job[2]}')
+
+        # print('task_name, execution_time, task_start_time, task_end_time, deadline_missed, job_no', job)
 
     print('leftover', leftover)
 
@@ -173,10 +181,10 @@ def preemptive(queue, tasks_period_map):
 
 def non_preemptive(queue, tasks_period_map):
     job_response_time = []
-    leftover = []
     output = []
     cpu_current_time = 0
     job_response_time = {}
+    discarded_jobs = {}
 
     for task in queue:
         task_name, execution_time, task_start_time, tnsfr_time, task_deadline, job_no = task
@@ -184,32 +192,47 @@ def non_preemptive(queue, tasks_period_map):
         task_end_time = task_start_time + tnsfr_time
         deadline_missed = task_end_time > task_deadline
 
-        job = (task_name,
+        job = [task_name,
                execution_time,
                task_start_time,
                task_end_time,
                deadline_missed,
-               job_no)
+               job_no]
 
         # print('task_name, execution_time, task_start_time, task_end_time, deadline_missed, job_no', job)
 
-        if task_name not in job_response_time:
-            job_response_time[task_name] = {}
+        if not deadline_missed:
+            if task_name not in job_response_time:
+                job_response_time[task_name] = {}
+            # when task should be offloaded then set start time of that task at the period start time
+            period = (job_no - 1) * tasks_period_map[task_name]
+            response_time = task_end_time + execution_time - period
 
-        period = (job_no - 1) * tasks_period_map[task_name]
-        response_time = task_end_time + execution_time - period
+            print(f'{task_name}:{job_no}  '
+                  f'period: {period}, '
+                  f'start: {task_start_time}, '
+                  f'execution: {execution_time}, '
+                  f'end: {task_end_time}, '
+                  f'deadline: {task_deadline}, '
+                  f'response: {response_time}')
 
-        print(f'{task_name}:{job_no}  start: {task_start_time}, execution: {execution_time}, end: {task_end_time}, current period: {period}, response: {response_time}')
+            job_response_time[task_name][job_no] = response_time
+            cpu_current_time = task_end_time
+            output.append(job)
+        else:
+            if task_name not in discarded_jobs:
+                discarded_jobs[task_name] = []
 
-        job_response_time[task_name][job_no] = response_time
+            discarded_jobs[task_name].append(job_no)
 
-        cpu_current_time = task_end_time
+            print(f'Discarded job {task_name}:{job_no}  '
+                  f'period: {period}, '
+                  f'start: {task_start_time}, '
+                  f'execution: {execution_time}, '
+                  f'end: {task_end_time}, '
+                  f'deadline: {task_deadline}')
 
-        output.append(job)
-
-    print('Leftover', leftover)
-
-    return output, job_response_time
+    return output, job_response_time, discarded_jobs
 
 
 def get_execution_time(no_of_instructions, cpu_capacity):
@@ -227,6 +250,18 @@ def print_response_time(response_time):
             print('Job', key, ', Response time', value)
 
 
+def print_discarded_jobs(discarded_jobs):
+    print('\n\nDiscarded offloaded jobs')
+    for task in sorted(discarded_jobs):
+        print(f'Task: {task} Jobs:', *discarded_jobs[task])
+
+
+def print_task_status(tasks_status, tasks):
+    print(tasks_status)
+    for task in sorted(tasks):
+        print(f'{task[0]}:{task[5]} start: {task[2]}, end: {task[3]}')
+
+
 if __name__ == "__main__":
     given_tasks = []
     # total_number_of_tasks = int(input("How many tasks to schedule: "))
@@ -236,7 +271,7 @@ if __name__ == "__main__":
 
     #     no_of_instructions, deadline, period, data_size = map(
     #         int,
-    #         input(f"Enter the No of Instructions, Deadline, Period and Data sizeof task {i}: ").split()
+    #         input(f"Enter the No of Instructions in millions, Deadline, Period and Data sizeof task {i}: ").split()
     #     )
 
     #     given_tasks.append([task_name, no_of_instructions, deadline, period, data_size])
@@ -287,9 +322,9 @@ if __name__ == "__main__":
 
     cpu_capacity = ((v * (freq*1000) + o) * no_of_cores) * 0.001  # millons of instructions per milisecond
     cpu_capacity = math.floor(cpu_capacity)
-    edge_cpu_capacity = math.floor(cpu_capacity * 5)
+    network_cpu_capacity = math.floor(cpu_capacity * 5)
     print('CPU Capacity: ', cpu_capacity)
-    print('Edge CPU Capacity: ', edge_cpu_capacity)
+    print('Edge CPU Capacity: ', network_cpu_capacity)
     task_no_of_ins_map = task_no_of_ins(given_tasks)
 
     calculated_tasks = []
@@ -301,7 +336,8 @@ if __name__ == "__main__":
         execution_time = get_execution_time(no_of_instructions, cpu_capacity)
         # calculated_task is the new tasks array with calculated execution time
         calculated_tasks.append([task_name, execution_time, deadline, period, data_size])
-    print('task name, millions of instructions, dealine, period, data size')
+
+    print('task name, execution time, dealine, period, data size')
     print('User input ', calculated_tasks)
 
     # finding out the total width or span of the chart
@@ -316,12 +352,10 @@ if __name__ == "__main__":
     # it will return the primary cpu jobs that can be executed on local cpu,
     # the jobs that are not possible to exucuted on local cpu as offloadable and
     # each job's response time
+    print('\n\nPrimary CPU scheduling')
     primary_cpu_jobs, offloadable, primary_job_response_time = preemptive(queue, tasks_period_map)
     # generating basic graph for primat cpu jobs
     primary_graph_data = get_graph(primary_cpu_jobs)
-
-    # print("Deadline missed for each task: ")
-    # print(get_deadline_table(queue))
 
     calc_offloadable = []
 
@@ -330,22 +364,23 @@ if __name__ == "__main__":
         # transfer time is added to the start time
         tnsfr_time = transfer_time(task_data_size_map[task_name], network_bandwidth)
         # finding out network cpu excution time
-        execution_time = get_execution_time(task_no_of_ins_map[task_name], edge_cpu_capacity)
+        execution_time = get_execution_time(task_no_of_ins_map[task_name], network_cpu_capacity)
         calc_offloadable.append([task_name, execution_time, task_start_time, tnsfr_time, task_deadline, job_no])
 
     # print('New start time after network transfer', calc_offloadable)
     # network cpu utilizes edf in no blockeing manner
-    network_cpu_jobs, network_job_response_time = non_preemptive(calc_offloadable, tasks_period_map)
+    print('\n\nNetwork CPU scheduling')
+    network_cpu_jobs, network_job_response_time, discarded_jobs = non_preemptive(calc_offloadable, tasks_period_map)
     # network_graph_data = get_graph(network_cpu_jobs)
 
     # finding out edf status frequency after `check_cycle` seconds
-    print('Cycle report')
+    print('\n\nCycle report')
     for time in range(check_cycle, span + 1, check_cycle):
         time_start = time - check_cycle + 1
         complete = []
         running = []
         offloaded = []
-        print(f"From time {time_start} to {time}")
+        print(f"\nFrom time {time_start} to {time}")
 
         for job in primary_cpu_jobs:
             job_start_time = job[2] + 1
@@ -361,19 +396,20 @@ if __name__ == "__main__":
             if job_start_time >= time_start and job_end_time <= time:
                 offloaded.append(job)
 
-        print('complete', complete)
-        print('running', running)
-        print('offloaded', offloaded)
+        print_task_status('Completed tasks', complete)
+        print_task_status('Running tasks', running)
+        print_task_status('Offloaded tasks', offloaded)
 
-    print('Primary CPU Job response time')
+    print('\n\nPrimary CPU Job response time')
     print_response_time(primary_job_response_time)
 
     if len(calc_offloadable):
-        print('Edge CPU Job response time')
+        print('\n\nEdge CPU Job response time')
         print_response_time(network_job_response_time)
+        print_discarded_jobs(discarded_jobs)
 
-        print('Missed job count for each task')
-        for key, value in Counter([job[0] for job in calc_offloadable]).items():
+        print('\n\nTotal missed job count for each task')
+        for key, value in Counter([job[0] for job in sorted(calc_offloadable)]).items():
             print(key, value)
 
     generate_gnatt_chart(primary_graph_data, span, 'Primary CPU EDF')
