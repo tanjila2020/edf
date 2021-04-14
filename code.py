@@ -190,7 +190,7 @@ def non_preemptive(queue, tasks_period_map):
         task_name, execution_time, task_start_time, tnsfr_time, task_deadline, job_no = task
         task_start_time = max(task_start_time, cpu_current_time)
         task_end_time = task_start_time + tnsfr_time
-        deadline_missed = task_end_time > task_deadline
+        deadline_missed = task_end_time + execution_time> task_deadline
 
         job = [task_name,
                execution_time,
@@ -211,7 +211,7 @@ def non_preemptive(queue, tasks_period_map):
             print(f'{task_name}:{job_no}  '
                   f'period: {period}, '
                   f'start: {task_start_time}, '
-                  f'execution: {execution_time}, '
+                  f'transfer_time: {tnsfr_time}, '
                   f'end: {task_end_time}, '
                   f'deadline: {task_deadline}, '
                   f'response: {response_time}')
@@ -235,8 +235,8 @@ def non_preemptive(queue, tasks_period_map):
     return output, job_response_time, discarded_jobs
 
 
-def get_execution_time(no_of_instructions, cpu_capacity):
-    return math.ceil(no_of_instructions / cpu_capacity)
+def get_execution_time(no_of_instructions, local_cpu_speed):
+    return math.ceil(no_of_instructions / local_cpu_speed)
 
 
 def transfer_time(datasize, network_bw):
@@ -318,13 +318,14 @@ if __name__ == "__main__":
     no_of_cores = 1
     network_bandwidth = 16  # network BW in Mbps
     check_cycle = 9
+    edge_cpu_speed_factor = 5
     # scheduling_period = 10
 
-    cpu_capacity = ((v * (freq*1000) + o) * no_of_cores) * 0.001  # millons of instructions per milisecond
-    cpu_capacity = math.floor(cpu_capacity)
-    network_cpu_capacity = math.floor(cpu_capacity * 5)
-    print('CPU Capacity: ', cpu_capacity)
-    print('Edge CPU Capacity: ', network_cpu_capacity)
+    local_cpu_speed = ((v * (freq*1000) + o) * no_of_cores) * 0.001  # millons of instructions per milisecond
+    local_cpu_speed = math.floor(local_cpu_speed)
+    edge_cpu_speed = math.floor(local_cpu_speed * edge_cpu_speed_factor)
+    print('Local CPU Speed (in millions of instruction per millisecond): ', local_cpu_speed)
+    print('Edge CPU speed: ', edge_cpu_speed)
     task_no_of_ins_map = task_no_of_ins(given_tasks)
 
     calculated_tasks = []
@@ -333,7 +334,7 @@ if __name__ == "__main__":
         # getting different parts of the task as different variable
         task_name, no_of_instructions, deadline, period, data_size = task
         # finding out main cpu execution time for each task
-        execution_time = get_execution_time(no_of_instructions, cpu_capacity)
+        execution_time = get_execution_time(no_of_instructions, local_cpu_speed)
         # calculated_task is the new tasks array with calculated execution time
         calculated_tasks.append([task_name, execution_time, deadline, period, data_size])
 
@@ -352,7 +353,7 @@ if __name__ == "__main__":
     # it will return the primary cpu jobs that can be executed on local cpu,
     # the jobs that are not possible to exucuted on local cpu as offloadable and
     # each job's response time
-    print('\n\nPrimary CPU scheduling')
+    print('\n\nPrimary CPU scheduling:')
     primary_cpu_jobs, offloadable, primary_job_response_time = preemptive(queue, tasks_period_map)
     # generating basic graph for primat cpu jobs
     primary_graph_data = get_graph(primary_cpu_jobs)
@@ -364,7 +365,7 @@ if __name__ == "__main__":
         # transfer time is added to the start time
         tnsfr_time = transfer_time(task_data_size_map[task_name], network_bandwidth)
         # finding out network cpu excution time
-        execution_time = get_execution_time(task_no_of_ins_map[task_name], network_cpu_capacity)
+        execution_time = get_execution_time(task_no_of_ins_map[task_name], edge_cpu_speed)
         calc_offloadable.append([task_name, execution_time, task_start_time, tnsfr_time, task_deadline, job_no])
 
     # print('New start time after network transfer', calc_offloadable)
